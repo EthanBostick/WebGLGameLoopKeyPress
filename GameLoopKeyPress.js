@@ -20,6 +20,33 @@ const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
+const collisionMessage = document.createElement("div");
+collisionMessage.textContent = "Collision is happening!";
+collisionMessage.style.position = "fixed";
+collisionMessage.style.top = "24px";
+collisionMessage.style.left = "50%";
+collisionMessage.style.transform = "translateX(-50%)";
+collisionMessage.style.fontFamily = "sans-serif";
+collisionMessage.style.fontSize = "28px";
+collisionMessage.style.fontWeight = "bold";
+collisionMessage.style.color = "#ffffff";
+collisionMessage.style.textShadow = "2px 2px 4px #000000";
+collisionMessage.style.display = "none";
+collisionMessage.style.zIndex = "1";
+document.body.appendChild(collisionMessage);
+
+const timerMessage = document.createElement("div");
+timerMessage.style.position = "fixed";
+timerMessage.style.top = "24px";
+timerMessage.style.right = "24px";
+timerMessage.style.fontFamily = "sans-serif";
+timerMessage.style.fontSize = "24px";
+timerMessage.style.fontWeight = "bold";
+timerMessage.style.color = "#ffffff";
+timerMessage.style.textShadow = "2px 2px 4px #000000";
+timerMessage.style.zIndex = "1";
+document.body.appendChild(timerMessage);
+
 // Ground Plane
 const planeGeometry = new THREE.PlaneGeometry(30, 30);
 const planeMaterial = new THREE.MeshStandardMaterial({
@@ -63,6 +90,56 @@ const player = new THREE.Mesh(
 player.position.y = 0.5;
 scene.add(player);
 
+const collisionObjects = [
+    new THREE.Mesh(
+        new THREE.SphereGeometry(1, 32, 16),
+        new THREE.MeshStandardMaterial({ color: 0xff6600 })
+    ),
+    new THREE.Mesh(
+        new THREE.ConeGeometry(1, 2, 32),
+        new THREE.MeshStandardMaterial({ color: 0xff00aa })
+    ),
+    new THREE.Mesh(
+        new THREE.CylinderGeometry(1, 1, 2, 32),
+        new THREE.MeshStandardMaterial({ color: 0xffff00 })
+    ),
+    new THREE.Mesh(
+        new THREE.TorusGeometry(1, 0.35, 16, 32),
+        new THREE.MeshStandardMaterial({ color: 0x00ffff })
+    ),
+    new THREE.Mesh(
+        new THREE.IcosahedronGeometry(1.1, 0),
+        new THREE.MeshStandardMaterial({ color: 0x22cc55 })
+    )
+];
+
+const targetObject = collisionObjects[collisionObjects.length - 1];
+const objectPositions = [];
+
+while (objectPositions.length < collisionObjects.length) {
+    const position = [
+        Math.random() * 12 - 6,
+        1,
+        Math.random() * 12 - 6
+    ];
+    const isFarEnoughFromPlayer = Math.hypot(position[0], position[2]) > 2.5;
+    const isFarEnoughFromObjects = objectPositions.every((otherPosition) =>
+        Math.hypot(
+            position[0] - otherPosition[0],
+            position[2] - otherPosition[2]
+        ) > 2.5
+    );
+
+    if (isFarEnoughFromPlayer && isFarEnoughFromObjects) {
+        objectPositions.push(position);
+    }
+}
+
+collisionObjects.forEach((object, index) => {
+    object.position.set(...objectPositions[index]);
+    scene.add(object);
+});
+
 // Keyboard State Object
 const keys = {};
 
@@ -78,11 +155,93 @@ window.addEventListener("keyup", (event) => {
 
 // Movement Speed
 const speed = 0.1;
+const playerBounds = new THREE.Box3();
+const objectBounds = new THREE.Box3();
+let collisionTime = 0;
+let targetFound = false;
+const gameStartTime = performance.now();
+const gameDuration = 20;
+
+function updateTimerMessage(secondsRemaining) {
+    if (secondsRemaining === 0) {
+        timerMessage.textContent = "TIME'S UP!";
+        timerMessage.style.top = "50%";
+        timerMessage.style.right = "auto";
+        timerMessage.style.left = "50%";
+        timerMessage.style.transform = "translate(-50%, -50%)";
+        timerMessage.style.width = "100%";
+        timerMessage.style.textAlign = "center";
+        timerMessage.style.fontSize = "15vw";
+        timerMessage.style.color = "#ff3333";
+    } else {
+        timerMessage.textContent = `Time: ${secondsRemaining}`;
+    }
+}
+
+function updateTimer() {
+    const elapsedSeconds = Math.floor((performance.now() - gameStartTime) / 1000);
+    const secondsRemaining = Math.max(gameDuration - elapsedSeconds, 0);
+    updateTimerMessage(secondsRemaining);
+}
+
+function updateCollisionMessage(isColliding) {
+    if (targetFound) {
+        collisionMessage.textContent = "Congratulations! You win!";
+        collisionMessage.style.display = "block";
+        collisionMessage.style.color = "#22cc55";
+    } else if (isColliding) {
+        collisionMessage.textContent = "Collision is happening!";
+        collisionTime += 0.05;
+        collisionMessage.style.display = "block";
+        collisionMessage.style.color = `hsl(${(collisionTime * 180) % 360}, 100%, 50%)`;
+    } else {
+        collisionTime = 0;
+        collisionMessage.textContent = "Collision is happening!";
+        collisionMessage.style.display = "none";
+        collisionMessage.style.color = "#ffffff";
+    }
+}
+
+function handleCollisions() {
+    playerBounds.setFromObject(player);
+    let isColliding = false;
+
+    collisionObjects.forEach((object) => {
+        if (object === targetObject) {
+            if (targetFound) {
+                return;
+            }
+
+            objectBounds.setFromObject(object);
+
+            if (playerBounds.intersectsBox(objectBounds)) {
+                targetFound = true;
+                object.visible = false;
+            }
+
+            return;
+        }
+
+        objectBounds.setFromObject(object);
+        const objectIsColliding = playerBounds.intersectsBox(objectBounds);
+
+        if (objectIsColliding) {
+            isColliding = true;
+            object.visible = Math.floor(performance.now() / 100) % 2 === 0;
+        } else {
+            object.visible = true;
+        }
+    });
+
+    updateCollisionMessage(isColliding);
+}
 
 // Animation Loop
 function animate() {
 
     requestAnimationFrame(animate);
+
+    updateTimer();
 
     // WASD Controls
     if (keys["w"]) {
@@ -117,6 +276,8 @@ function animate() {
     if (keys["arrowright"]) {
         player.position.x += speed;
     }
+
+    handleCollisions();
 
     renderer.render(scene, camera);
 }
