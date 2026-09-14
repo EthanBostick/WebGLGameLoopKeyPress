@@ -90,7 +90,7 @@ const player = new THREE.Mesh(
 player.position.y = 0.5;
 scene.add(player);
 
-const collisionObjects = [
+const planeObjects = [
     new THREE.Mesh(
         new THREE.SphereGeometry(1, 32, 16),
         new THREE.MeshStandardMaterial({ color: 0xff6600 })
@@ -113,32 +113,37 @@ const collisionObjects = [
     )
 ];
 
-const targetObject = collisionObjects[collisionObjects.length - 1];
-const objectPositions = [];
+const targetObject = planeObjects[planeObjects.length - 1];
 
-while (objectPositions.length < collisionObjects.length) {
-    const position = [
-        Math.random() * 12 - 6,
-        1,
-        Math.random() * 12 - 6
-    ];
-    const isFarEnoughFromPlayer = Math.hypot(position[0], position[2]) > 2.5;
-    const isFarEnoughFromObjects = objectPositions.every((otherPosition) =>
-        Math.hypot(
-            position[0] - otherPosition[0],
-            position[2] - otherPosition[2]
-        ) > 2.5
-    );
+function placeObjects(objects) {
+    const objectPositions = [];
 
-    if (isFarEnoughFromPlayer && isFarEnoughFromObjects) {
-        objectPositions.push(position);
+    while (objectPositions.length < objects.length) {
+        const position = [
+            Math.random() * 12 - 6,
+            1,
+            Math.random() * 12 - 6
+        ];
+        const isFarEnoughFromPlayer = Math.hypot(position[0], position[2]) > 2.5;
+        const isFarEnoughFromObjects = objectPositions.every((otherPosition) =>
+            Math.hypot(
+                position[0] - otherPosition[0],
+                position[2] - otherPosition[2]
+            ) > 2.5
+        );
+
+        if (isFarEnoughFromPlayer && isFarEnoughFromObjects) {
+            objectPositions.push(position);
+        }
     }
+
+    objects.forEach((object, index) => {
+        object.position.set(...objectPositions[index]);
+        scene.add(object);
+    });
 }
 
-collisionObjects.forEach((object, index) => {
-    object.position.set(...objectPositions[index]);
-    scene.add(object);
-});
+placeObjects(planeObjects);
 
 // Keyboard State Object
 const keys = {};
@@ -206,7 +211,7 @@ function handleCollisions() {
     playerBounds.setFromObject(player);
     let isColliding = false;
 
-    collisionObjects.forEach((object) => {
+    planeObjects.forEach((object) => {
         if (object === targetObject) {
             if (targetFound) {
                 return;
