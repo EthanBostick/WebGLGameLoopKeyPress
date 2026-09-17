@@ -47,6 +47,22 @@ timerMessage.style.textShadow = "2px 2px 4px #000000";
 timerMessage.style.zIndex = "1";
 document.body.appendChild(timerMessage);
 
+let score = 0;
+let gameWon = false;
+
+const scoreDisplay = document.createElement("div");
+scoreDisplay.style.position = "fixed";
+scoreDisplay.style.top = "24px";
+scoreDisplay.style.left = "24px";
+scoreDisplay.style.fontFamily = "sans-serif";
+scoreDisplay.style.fontSize = "24px";
+scoreDisplay.style.fontWeight = "bold";
+scoreDisplay.style.color = "#ffffff";
+scoreDisplay.style.textShadow = "2px 2px 4px #000000";
+scoreDisplay.style.zIndex = "1";
+scoreDisplay.textContent = "Score: 0 / 10"; 
+document.body.appendChild(scoreDisplay);
+
 // Ground Plane
 const planeGeometry = new THREE.PlaneGeometry(30, 30);
 const planeMaterial = new THREE.MeshStandardMaterial({
@@ -90,60 +106,20 @@ const player = new THREE.Mesh(
 player.position.y = 0.5;
 scene.add(player);
 
-const planeObjects = [
-    new THREE.Mesh(
-        new THREE.SphereGeometry(1, 32, 16),
-        new THREE.MeshStandardMaterial({ color: 0xff6600 })
-    ),
-    new THREE.Mesh(
-        new THREE.ConeGeometry(1, 2, 32),
-        new THREE.MeshStandardMaterial({ color: 0xff00aa })
-    ),
-    new THREE.Mesh(
-        new THREE.CylinderGeometry(1, 1, 2, 32),
-        new THREE.MeshStandardMaterial({ color: 0xffff00 })
-    ),
-    new THREE.Mesh(
-        new THREE.TorusGeometry(1, 0.35, 16, 32),
-        new THREE.MeshStandardMaterial({ color: 0x00ffff })
-    ),
-    new THREE.Mesh(
-        new THREE.IcosahedronGeometry(1.1, 0),
-        new THREE.MeshStandardMaterial({ color: 0x22cc55 })
-    )
-];
+const collectibles = [];
+const collectibleGeometry = new THREE.BoxGeometry(0.7, 0.7, 0.7);
+const collectibleMaterial = new THREE.MeshStandardMaterial({ color: 0xff3333 });
 
-const targetObject = planeObjects[planeObjects.length - 1];
-
-function placeObjects(objects) {
-    const objectPositions = [];
-
-    while (objectPositions.length < objects.length) {
-        const position = [
-            Math.random() * 12 - 6,
-            1,
-            Math.random() * 12 - 6
-        ];
-        const isFarEnoughFromPlayer = Math.hypot(position[0], position[2]) > 2.5;
-        const isFarEnoughFromObjects = objectPositions.every((otherPosition) =>
-            Math.hypot(
-                position[0] - otherPosition[0],
-                position[2] - otherPosition[2]
-            ) > 2.5
-        );
-
-        if (isFarEnoughFromPlayer && isFarEnoughFromObjects) {
-            objectPositions.push(position);
-        }
-    }
-
-    objects.forEach((object, index) => {
-        object.position.set(...objectPositions[index]);
-        scene.add(object);
-    });
+for(let i = 0; i < 10; i++) {
+    const cube = new THREE.Mesh(collectibleGeometry, collectibleMaterial);
+    
+    cube.position.x = (Math.random() - 0.5) * 25;
+    cube.position.y = 0.5; // Keeps it on top of the plane
+    cube.position.z = (Math.random() - 0.5) * 25;
+    
+    scene.add(cube);
+    collectibles.push(cube);
 }
-
-placeObjects(planeObjects);
 
 // Keyboard State Object
 const keys = {};
@@ -169,17 +145,17 @@ const gameDuration = 20;
 
 function updateTimerMessage(secondsRemaining) {
     if (secondsRemaining === 0) {
-        timerMessage.textContent = "TIME'S UP!";
-        timerMessage.style.top = "50%";
-        timerMessage.style.right = "auto";
-        timerMessage.style.left = "50%";
-        timerMessage.style.transform = "translate(-50%, -50%)";
-        timerMessage.style.width = "100%";
-        timerMessage.style.textAlign = "center";
-        timerMessage.style.fontSize = "15vw";
-        timerMessage.style.color = "#ff3333";
+	timerMessage.textContent = "TIME'S UP!";
+	timerMessage.style.top = "50%";
+	timerMessage.style.right = "auto";
+	timerMessage.style.left = "50%";
+	timerMessage.style.transform = "translate(-50%, -50%)";
+	timerMessage.style.width = "100%";
+	timerMessage.style.textAlign = "center";
+	timerMessage.style.fontSize = "15vw";
+	timerMessage.style.color = "#ff3333";
     } else {
-        timerMessage.textContent = `Time: ${secondsRemaining}`;
+	timerMessage.textContent = `Time: ${secondsRemaining}`;
     }
 }
 
@@ -191,54 +167,46 @@ function updateTimer() {
 
 function updateCollisionMessage(isColliding) {
     if (targetFound) {
-        collisionMessage.textContent = "Congratulations! You win!";
-        collisionMessage.style.display = "block";
-        collisionMessage.style.color = "#22cc55";
+	collisionMessage.textContent = "Congratulations! You win!";
+	collisionMessage.style.display = "block";
+	collisionMessage.style.color = "#22cc55";
     } else if (isColliding) {
-        collisionMessage.textContent = "Collision is happening!";
-        collisionTime += 0.05;
-        collisionMessage.style.display = "block";
-        collisionMessage.style.color = `hsl(${(collisionTime * 180) % 360}, 100%, 50%)`;
+	collisionMessage.textContent = "Collision is happening!";
+	collisionTime += 0.05;
+	collisionMessage.style.display = "block";
+	collisionMessage.style.color = `hsl(${(collisionTime * 180) % 360}, 100%, 50%)`;
     } else {
-        collisionTime = 0;
-        collisionMessage.textContent = "Collision is happening!";
-        collisionMessage.style.display = "none";
-        collisionMessage.style.color = "#ffffff";
+	collisionTime = 0;
+	collisionMessage.textContent = "Collision is happening!";
+	collisionMessage.style.display = "none";
+	collisionMessage.style.color = "#ffffff";
     }
 }
 
 function handleCollisions() {
+    if (gameWon) return;
+
     playerBounds.setFromObject(player);
-    let isColliding = false;
 
-    planeObjects.forEach((object) => {
-        if (object === targetObject) {
-            if (targetFound) {
-                return;
-            }
+    for (let i = collectibles.length - 1; i >= 0; i--) {
+	const cube = collectibles[i];
+	objectBounds.setFromObject(cube);
 
-            objectBounds.setFromObject(object);
+	if (playerBounds.intersectsBox(objectBounds)) {
+	    scene.remove(cube);
+	    collectibles.splice(i, 1);
+	    score++;
+	    
+	    scoreDisplay.textContent = `Score: ${score} / 10`;
 
-            if (playerBounds.intersectsBox(objectBounds)) {
-                targetFound = true;
-                object.visible = false;
-            }
-
-            return;
-        }
-
-        objectBounds.setFromObject(object);
-        const objectIsColliding = playerBounds.intersectsBox(objectBounds);
-
-        if (objectIsColliding) {
-            isColliding = true;
-            object.visible = Math.floor(performance.now() / 100) % 2 === 0;
-        } else {
-            object.visible = true;
-        }
-    });
-
-    updateCollisionMessage(isColliding);
+	    if (collectibles.length === 0) {
+		gameWon = true;
+		collisionMessage.textContent = "You Win!";
+		collisionMessage.style.display = "block";
+		collisionMessage.style.color = "#22cc55";
+	    }
+	}
+    }
 }
 
 // Animation Loop
@@ -246,40 +214,46 @@ function animate() {
 
     requestAnimationFrame(animate);
 
-    updateTimer();
+    collectibles.forEach(cube => {
+	cube.rotation.y += 0.02;
+	cube.rotation.x += 0.01;
+    });
 
-    // WASD Controls
-    if (keys["w"]) {
-        player.position.z -= speed;
-    }
+    if (!gameWon) {
+    	    updateTimer();
+	    // WASD Controls
+	    if (keys["w"]) {
+		player.position.z -= speed;
+	    }
 
-    if (keys["s"]) {
-        player.position.z += speed;
-    }
+	    if (keys["s"]) {
+		player.position.z += speed;
+	    }
 
-    if (keys["a"]) {
-        player.position.x -= speed;
-    }
+	    if (keys["a"]) {
+		player.position.x -= speed;
+	    }
 
-    if (keys["d"]) {
-        player.position.x += speed;
-    }
+	    if (keys["d"]) {
+		player.position.x += speed;
+	    }
 
-    // Arrow Key Controls
-    if (keys["arrowup"]) {
-        player.position.z -= speed;
-    }
+	    // Arrow Key Controls
+	    if (keys["arrowup"]) {
+		player.position.z -= speed;
+	    }
 
-    if (keys["arrowdown"]) {
-        player.position.z += speed;
-    }
+	    if (keys["arrowdown"]) {
+		player.position.z += speed;
+	    }
 
-    if (keys["arrowleft"]) {
-        player.position.x -= speed;
-    }
+	    if (keys["arrowleft"]) {
+		player.position.x -= speed;
+	    }
 
-    if (keys["arrowright"]) {
-        player.position.x += speed;
+	    if (keys["arrowright"]) {
+		player.position.x += speed;
+	    }
     }
 
     handleCollisions();
@@ -293,13 +267,13 @@ animate();
 window.addEventListener("resize", () => {
 
     camera.aspect =
-        window.innerWidth / window.innerHeight;
+	window.innerWidth / window.innerHeight;
 
     camera.updateProjectionMatrix();
 
     renderer.setSize(
-        window.innerWidth,
-        window.innerHeight
+	window.innerWidth,
+	window.innerHeight
     );
 
 });
