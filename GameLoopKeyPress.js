@@ -20,35 +20,25 @@ const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
+// UI Messages
 const collisionMessage = document.createElement("div");
-collisionMessage.textContent = "Collision is happening!";
 collisionMessage.style.position = "fixed";
-collisionMessage.style.top = "24px";
+collisionMessage.style.top = "50%";
 collisionMessage.style.left = "50%";
-collisionMessage.style.transform = "translateX(-50%)";
+collisionMessage.style.transform = "translate(-50%, -50%)";
 collisionMessage.style.fontFamily = "sans-serif";
-collisionMessage.style.fontSize = "28px";
+collisionMessage.style.fontSize = "15vw";
 collisionMessage.style.fontWeight = "bold";
-collisionMessage.style.color = "#ffffff";
+collisionMessage.style.color = "#ff3333";
 collisionMessage.style.textShadow = "2px 2px 4px #000000";
 collisionMessage.style.display = "none";
 collisionMessage.style.zIndex = "1";
 document.body.appendChild(collisionMessage);
 
-const timerMessage = document.createElement("div");
-timerMessage.style.position = "fixed";
-timerMessage.style.top = "24px";
-timerMessage.style.right = "24px";
-timerMessage.style.fontFamily = "sans-serif";
-timerMessage.style.fontSize = "24px";
-timerMessage.style.fontWeight = "bold";
-timerMessage.style.color = "#ffffff";
-timerMessage.style.textShadow = "2px 2px 4px #000000";
-timerMessage.style.zIndex = "1";
-document.body.appendChild(timerMessage);
-
 let score = 0;
-let gameWon = false;
+let gameOver = false;
+let lastSpawn = 0;
+let spawnInterval = 1000; // Starting spawn time in milliseconds
 
 const scoreDisplay = document.createElement("div");
 scoreDisplay.style.position = "fixed";
@@ -60,7 +50,7 @@ scoreDisplay.style.fontWeight = "bold";
 scoreDisplay.style.color = "#ffffff";
 scoreDisplay.style.textShadow = "2px 2px 4px #000000";
 scoreDisplay.style.zIndex = "1";
-scoreDisplay.textContent = "Score: 0 / 10"; 
+scoreDisplay.textContent = "Score: 0"; 
 document.body.appendChild(scoreDisplay);
 
 // Ground Plane
@@ -106,19 +96,21 @@ const player = new THREE.Mesh(
 player.position.y = 0.5;
 scene.add(player);
 
-const collectibles = [];
-const collectibleGeometry = new THREE.BoxGeometry(0.7, 0.7, 0.7);
-const collectibleMaterial = new THREE.MeshStandardMaterial({ color: 0xff3333 });
+// Obstacles Array & Spawning
+const obstacles = [];
+const obstacleGeometry = new THREE.BoxGeometry(1, 1, 1);
+const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
 
-for(let i = 0; i < 10; i++) {
-    const cube = new THREE.Mesh(collectibleGeometry, collectibleMaterial);
+function spawnObstacle() {
+    const obstacle = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
     
-    cube.position.x = (Math.random() - 0.5) * 25;
-    cube.position.y = 0.5; // Keeps it on top of the plane
-    cube.position.z = (Math.random() - 0.5) * 25;
+    // Randomize across both X and Z axes for full 3D space
+    const randomX = (Math.random() - 0.5) * 20;
+    const randomZ = (Math.random() - 0.5) * 20;
+    obstacle.position.set(randomX, 10, randomZ);
     
-    scene.add(cube);
-    collectibles.push(cube);
+    scene.add(obstacle);
+    obstacles.push(obstacle);
 }
 
 // Keyboard State Object
@@ -134,129 +126,72 @@ window.addEventListener("keyup", (event) => {
     keys[event.key.toLowerCase()] = false;
 });
 
-// Movement Speed
+// Movement Speed and Bounds
 const speed = 0.1;
 const playerBounds = new THREE.Box3();
 const objectBounds = new THREE.Box3();
-let collisionTime = 0;
-let targetFound = false;
-const gameStartTime = performance.now();
-const gameDuration = 20;
-
-function updateTimerMessage(secondsRemaining) {
-    if (secondsRemaining === 0) {
-	timerMessage.textContent = "TIME'S UP!";
-	timerMessage.style.top = "50%";
-	timerMessage.style.right = "auto";
-	timerMessage.style.left = "50%";
-	timerMessage.style.transform = "translate(-50%, -50%)";
-	timerMessage.style.width = "100%";
-	timerMessage.style.textAlign = "center";
-	timerMessage.style.fontSize = "15vw";
-	timerMessage.style.color = "#ff3333";
-    } else {
-	timerMessage.textContent = `Time: ${secondsRemaining}`;
-    }
-}
-
-function updateTimer() {
-    const elapsedSeconds = Math.floor((performance.now() - gameStartTime) / 1000);
-    const secondsRemaining = Math.max(gameDuration - elapsedSeconds, 0);
-    updateTimerMessage(secondsRemaining);
-}
-
-function updateCollisionMessage(isColliding) {
-    if (targetFound) {
-	collisionMessage.textContent = "Congratulations! You win!";
-	collisionMessage.style.display = "block";
-	collisionMessage.style.color = "#22cc55";
-    } else if (isColliding) {
-	collisionMessage.textContent = "Collision is happening!";
-	collisionTime += 0.05;
-	collisionMessage.style.display = "block";
-	collisionMessage.style.color = `hsl(${(collisionTime * 180) % 360}, 100%, 50%)`;
-    } else {
-	collisionTime = 0;
-	collisionMessage.textContent = "Collision is happening!";
-	collisionMessage.style.display = "none";
-	collisionMessage.style.color = "#ffffff";
-    }
-}
 
 function handleCollisions() {
-    if (gameWon) return;
+    if (gameOver) return;
 
     playerBounds.setFromObject(player);
 
-    for (let i = collectibles.length - 1; i >= 0; i--) {
-	const cube = collectibles[i];
-	objectBounds.setFromObject(cube);
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+        const obstacle = obstacles[i];
+        objectBounds.setFromObject(obstacle);
 
-	if (playerBounds.intersectsBox(objectBounds)) {
-	    scene.remove(cube);
-	    collectibles.splice(i, 1);
-	    score++;
-	    
-	    scoreDisplay.textContent = `Score: ${score} / 10`;
-
-	    if (collectibles.length === 0) {
-		gameWon = true;
-		collisionMessage.textContent = "You Win!";
-		collisionMessage.style.display = "block";
-		collisionMessage.style.color = "#22cc55";
-	    }
-	}
+        if (playerBounds.intersectsBox(objectBounds)) {
+            gameOver = true;
+            collisionMessage.textContent = "GAME OVER";
+            collisionMessage.style.display = "block";
+        }
     }
 }
 
 // Animation Loop
 function animate() {
-
     requestAnimationFrame(animate);
 
-    collectibles.forEach(cube => {
-	cube.rotation.y += 0.02;
-	cube.rotation.x += 0.01;
-    });
+    if (!gameOver) {
+        // Spawn Blocks Repeatedly and increase frequency
+        const currentTime = performance.now();
+        if(currentTime - lastSpawn > spawnInterval) {
+            spawnObstacle();
+            score++;
+            scoreDisplay.textContent = `Score: ${score}`;
+            lastSpawn = currentTime;
+            
+            // Decrease interval by 10ms to make it harder, bottoming out at 200ms
+            if (spawnInterval > 50) {
+                spawnInterval -= spawnInterval/10; //exponential increase
+            }
+        }
 
-    if (!gameWon) {
-    	    updateTimer();
-	    // WASD Controls
-	    if (keys["w"]) {
-		player.position.z -= speed;
-	    }
+        // WASD Controls
+        if (keys["w"]) player.position.z -= speed;
+        if (keys["s"]) player.position.z += speed;
+        if (keys["a"]) player.position.x -= speed;
+        if (keys["d"]) player.position.x += speed;
 
-	    if (keys["s"]) {
-		player.position.z += speed;
-	    }
+        // Arrow Key Controls
+        if (keys["arrowup"]) player.position.z -= speed;
+        if (keys["arrowdown"]) player.position.z += speed;
+        if (keys["arrowleft"]) player.position.x -= speed;
+        if (keys["arrowright"]) player.position.x += speed;
 
-	    if (keys["a"]) {
-		player.position.x -= speed;
-	    }
+        // Move and Remove Falling Blocks
+        for (let i = obstacles.length - 1; i >= 0; i--) {
+            let obstacle = obstacles[i];
+            obstacle.position.y -= 0.05;
 
-	    if (keys["d"]) {
-		player.position.x += speed;
-	    }
+            if (obstacle.position.y < -2) {
+                scene.remove(obstacle);
+                obstacles.splice(i, 1);
+            }
+        }
 
-	    // Arrow Key Controls
-	    if (keys["arrowup"]) {
-		player.position.z -= speed;
-	    }
-
-	    if (keys["arrowdown"]) {
-		player.position.z += speed;
-	    }
-
-	    if (keys["arrowleft"]) {
-		player.position.x -= speed;
-	    }
-
-	    if (keys["arrowright"]) {
-		player.position.x += speed;
-	    }
+        handleCollisions();
     }
-
-    handleCollisions();
 
     renderer.render(scene, camera);
 }
@@ -265,15 +200,7 @@ animate();
 
 // Handle Window Resize
 window.addEventListener("resize", () => {
-
-    camera.aspect =
-	window.innerWidth / window.innerHeight;
-
+    camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
-
-    renderer.setSize(
-	window.innerWidth,
-	window.innerHeight
-    );
-
+    renderer.setSize(window.innerWidth, window.innerHeight);
 });
